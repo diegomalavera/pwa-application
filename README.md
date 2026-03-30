@@ -1,6 +1,4 @@
-# PWA
-
-Implementación de PWA en un sitio web.
+# Aplicación PWA
 
 ## **1. Web PWA**
 
@@ -15,6 +13,7 @@ https://malavera.online/web-pwa/
 ## Autor - Diego Malavera
 
 https://github.com/diegomalavera
+
 https://www.linkedin.com/in/diegomalavera/
 
 ## Licencia
