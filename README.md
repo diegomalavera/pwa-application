@@ -10,6 +10,16 @@ Puedes acceder a la aplicación aquí:
 
 https://malavera.online/web-pwa/
 
+## **1. Tasks PWA**
+
+Puedes ver el código fuente aquí:
+
+https://github.com/diegomalavera/pwa-application/tree/main/tasks-pwa
+
+Puedes acceder a la aplicación aquí:
+
+https://malavera.online/tasks-pwa/
+
 ## Autor - Diego Malavera
 
 https://github.com/diegomalavera
