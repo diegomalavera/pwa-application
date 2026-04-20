@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskManager - Mi Panel de Tareas</title>
+    <base href="/">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <script type="text/javascript" src="/js/script.js"></script>
+</head>
+<body class="tasks-page">
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <h1>📋 TaskManager</h1>
+                <p class="header-subtitle">Tu gestor personal de tareas</p>
+            </div>
+            <div class="user-info">
+                <div class="avatar" id="avatar">JP</div>
+                <button class="logout-btn" onclick="handleLogout()">Cerrar Sesión</button>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="total-tasks">0</div>
+                <div class="stat-label">Tareas Totales</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="completed-tasks">0</div>
+                <div class="stat-label">Completadas</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="pending-tasks">0</div>
+                <div class="stat-label">Pendientes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="progress-percent">0%</div>
+                <div class="stat-label">Progreso</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Add Task Section -->
+            <div class="add-task-section">
+                <div class="add-task-form">
+                    <input 
+                        type="text" 
+                        id="new-task-input" 
+                        class="new-task-input" 
+                        placeholder="Añade una nueva tarea..."
+                    >
+                    <select id="priority-select" class="priority-select">
+                        <option value="low">Baja</option>
+                        <option value="medium" selected>Media</option>
+                        <option value="high">Alta</option>
+                    </select>
+                    <button class="add-task-btn" onclick="addTask()">+ Añadir</button>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all" onclick="filterTasks('all')">Todas</button>
+                <button class="filter-btn" data-filter="active" onclick="filterTasks('active')">Activas</button>
+                <button class="filter-btn" data-filter="completed" onclick="filterTasks('completed')">Completadas</button>
+                <button class="filter-btn" data-filter="high" onclick="filterTasks('high')">Alta Prioridad</button>
+            </div>
+
+            <!-- Search -->
+            <div class="tasks-header">
+                <h2>Mis Tareas</h2>
+                <input 
+                    type="text" 
+                    class="search-box" 
+                    id="search-input" 
+                    placeholder="Buscar tareas..."
+                    onkeyup="searchTasks()"
+                >
+            </div>
+
+            <!-- Tasks List -->
+            <div class="tasks-list" id="tasks-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📝</div>
+                    <h3>Sin tareas aún</h3>
+                    <p>Crea tu primera tarea para comenzar</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Editar Tarea</h2>
+                <button class="close-modal" onclick="closeModal()">×</button>
+            </div>
+            <form id="editForm" onsubmit="saveEditedTask(event)">
+                <div class="form-group">
+                    <label for="edit-title">Título</label>
+                    <input type="text" id="edit-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Descripción</label>
+                    <textarea id="edit-description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-priority">Prioridad</label>
+                    <select id="edit-priority" required>
+                        <option value="low">Baja</option>
+                        <option value="medium">Media</option>
+                        <option value="high">Alta</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-duedate">Fecha Límite</label>
+                    <input type="date" id="edit-duedate">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="save-btn">Guardar Cambios</button>
+                    <button type="button" class="cancel-btn" onclick="closeModal()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let tasks = [];
+        let currentFilter = 'all';
+        let currentSearchTerm = '';
+        let editingTaskId = null;
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadUser();
+            await loadTasks();
+        });
+
+        document.getElementById('new-task-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTask();
+            }
+        });
+
+        async function loadUser() {
+            try {
+                const res = await fetch('api/auth/me');
+                const data = await res.json();
+                if (!data.success) {
+                    window.location.href = '';
+                    return;
+                }
+                currentUser = data.user;
+                const initials = getInitials(currentUser.name || currentUser.email);
+                document.getElementById('avatar').textContent = initials;
+            } catch (err) {
+                console.error('Error cargando usuario:', err);
+                window.location.href = '';
+            }
+        }
+
+        async function loadTasks() {
+            try {
+                const res = await fetch('api/tasks');
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'No se pudieron cargar las tareas');
+                    return;
+                }
+                tasks = data.tasks;
+                updateStats();
+                renderTasks();
+            } catch (err) {
+                console.error('Error cargando tareas:', err);
+                alert('Error cargando tareas');
+            }
+        }
+
+        async function addTask() {
+            const input = document.getElementById('new-task-input');
+            const priority = document.getElementById('priority-select').value;
+            const title = input.value.trim();
+
+            if (!title) {
+                alert('Por favor ingresa un título para la tarea');
+                return;
+            }
+
+            try {
+                const res = await fetch('api/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title, priority })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Error creando la tarea');
+                    return;
+                }
+                tasks.unshift(data.task);
+                updateStats();
+                renderTasks();
+                input.value = '';
+                document.getElementById('priority-select').value = 'medium';
+            } catch (err) {
+                console.error('Error creando tarea:', err);
+                alert('Error creando tarea');
+            }
+        }
+
+        async function toggleTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            try {
+                const res = await fetch(`/api/tasks/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ completed: !task.completed })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Error actualizando la tarea');
+                    return;
+                }
+                task.completed = data.task.completed;
+                updateStats();
+                renderTasks();
+            } catch (err) {
+                console.error('Error actualizando tarea:', err);
+                alert('Error actualizando tarea');
+            }
+        }
+
+        async function deleteTask(id) {
+            if (!confirm('¿Estás seguro de que deseas eliminar esta tarea?')) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Error eliminando la tarea');
+                    return;
+                }
+                tasks = tasks.filter(t => t.id !== id);
+                updateStats();
+                renderTasks();
+            } catch (err) {
+                console.error('Error eliminando tarea:', err);
+                alert('Error eliminando tarea');
+            }
+        }
+
+        async function openEditModal(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+
+            editingTaskId = id;
+            document.getElementById('edit-title').value = task.title;
+            document.getElementById('edit-description').value = task.description || '';
+            document.getElementById('edit-priority').value = task.priority;
+            document.getElementById('edit-duedate').value = task.dueDate || '';
+
+            document.getElementById('editModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.remove('active');
+            editingTaskId = null;
+        }
+
+        async function saveEditedTask(event) {
+            event.preventDefault();
+
+            const title = document.getElementById('edit-title').value.trim();
+            const description = document.getElementById('edit-description').value.trim();
+            const priority = document.getElementById('edit-priority').value;
+            const dueDate = document.getElementById('edit-duedate').value || null;
+
+            try {
+                const res = await fetch(`/api/tasks/${editingTaskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title, description, priority, dueDate })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Error guardando cambios');
+                    return;
+                }
+                const index = tasks.findIndex(t => t.id === editingTaskId);
+                if (index >= 0) {
+                    tasks[index] = data.task;
+                }
+                updateStats();
+                renderTasks();
+                closeModal();
+            } catch (err) {
+                console.error('Error guardando tarea:', err);
+                alert('Error guardando tarea');
+            }
+        }
+
+        function filterTasks(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            renderTasks();
+        }
+
+        // Search tasks
+        function searchTasks() {
+            currentSearchTerm = document.getElementById('search-input').value.toLowerCase();
+            renderTasks();
+        }
+
+        // Get filtered tasks
+        function getFilteredTasks() {
+            let filtered = tasks;
+
+            // Apply filter
+            if (currentFilter === 'active') {
+                filtered = filtered.filter(t => !t.completed);
+            } else if (currentFilter === 'completed') {
+                filtered = filtered.filter(t => t.completed);
+            } else if (currentFilter === 'high') {
+                filtered = filtered.filter(t => t.priority === 'high');
+            }
+
+            // Apply search
+            if (currentSearchTerm) {
+                filtered = filtered.filter(t =>
+                    t.title.toLowerCase().includes(currentSearchTerm) ||
+                    (t.description && t.description.toLowerCase().includes(currentSearchTerm))
+                );
+            }
+
+            return filtered;
+        }
+
+        // Render tasks
+        function renderTasks() {
+            const tasksList = document.getElementById('tasks-list');
+            const filtered = getFilteredTasks();
+
+            if (filtered.length === 0) {
+                tasksList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <h3>Sin tareas</h3>
+                        <p>Crea una tarea o cambia los filtros</p>
+                    </div>
+                `;
+                return;
+            }
+
+            tasksList.innerHTML = filtered.map(task => `
+                <div class="task-item ${task.completed ? 'completed' : ''} ${task.priority}-priority">
+                    <input 
+                        type="checkbox" 
+                        class="task-checkbox" 
+                        ${task.completed ? 'checked' : ''}
+                        onchange="toggleTask(${task.id})"
+                    >
+                    <div class="task-content">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        <div class="task-meta">
+                            <span class="priority-badge priority-${task.priority}">
+                                ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                            </span>
+                            ${task.dueDate ? `<span>📅 ${formatDate(task.dueDate)}</span>` : ''}
+                            ${task.description ? `<span>📝 ${escapeHtml(task.description.substring(0, 30))}...</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="action-btn edit-btn" onclick="openEditModal(${task.id})" title="Editar">✏️</button>
+                        <button class="action-btn delete-btn" onclick="deleteTask(${task.id})" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update statistics
+        function updateStats() {
+            const total = tasks.length;
+            const completed = tasks.filter(t => t.completed).length;
+            const pending = total - completed;
+            const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+            document.getElementById('total-tasks').textContent = total;
+            document.getElementById('completed-tasks').textContent = completed;
+            document.getElementById('pending-tasks').textContent = pending;
+            document.getElementById('progress-percent').textContent = progress + '%';
+        }
+
+        // Utility functions
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getInitials(name) {
+            return name
+                .split(' ')
+                .slice(0, 2)
+                .map(part => part[0].toUpperCase())
+                .join('');
+        }
+
+        function handleLogout() {
+            fetch('api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    localStorage.clear();
+                    window.location.href = '';
+                } else {
+                    alert('Error al cerrar sesión: ' + data.message);
+                }
+            })
+            .catch(() => {
+                alert('Error al cerrar sesión');
+            });
+        }
+
+        document.getElementById('editModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'editModal') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
